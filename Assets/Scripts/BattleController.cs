@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
+using UnityEngine.UI;
 
 public class BattleController : MonoBehaviour {
 	public enum BattleStates {
@@ -21,81 +22,106 @@ public class BattleController : MonoBehaviour {
 
 	public GameObject player;
 	public List<GameObject> enemies;
+	public Button attackButton;
+	public int movementSpeed;
 
 	private BattleStates currentState;
 	private AttackingStates attackState;
 	private float attackTimer;
+	private bool isActionFinished;
 
 	void Start () {
 		currentState = BattleStates.START;
 		attackTimer = -10.0f;
+		attackButton.onClick.AddListener (attackClick);
 	}
-	
-	// Update is called once per frame
+
 	void Update () {
 		//Debug.Log (currentState);
+		isActionFinished = false;
 		switch (currentState) {
 		case BattleStates.START:
-			currentState = BattleStates.PLAYERTURN;
+			nextBattleState ();
 			break;
 		case BattleStates.PLAYERTURN:
-			currentState = BattleStates.PLAYERANIMATION;
-			attackState = AttackingStates.GOING;
 			break;
 		case BattleStates.PLAYERANIMATION:
-			CharacterAttack(player, enemies[0]);
+			CharacterAttack (player);
 			break;
 		case BattleStates.ENEMYTURN:
+			CharacterAttack(enemies[0]);
 			break;
 		case BattleStates.WIN:
 			break;
 		case BattleStates.LOSE:
 			break;
 		}
+		if (isActionFinished) {
+			nextBattleState ();
+			attackState = AttackingStates.GOING;
+		}
 	}
 
-	private void CharacterAttack(GameObject char1, GameObject char2) {
-		Transform char1Model = getModel (char1);
-		NavMeshAgent nav = char1Model.GetComponent<NavMeshAgent> ();
+	private void CharacterAttack(GameObject character) {
+		Vector3 moveDirection = Vector3.zero;
 
 		switch (attackState) {
 		case AttackingStates.GOING:
-			char1Model.GetComponent<Animator> ().SetBool ("Running", true);
-			nav.SetDestination (char2.transform.position);
+			character.GetComponent<Animator> ().SetBool ("Running", true);
+			moveDirection = new Vector3 (0, 0, movementSpeed);
+			character.transform.Translate (moveDirection * Time.deltaTime);
 
-			float distanceToTarget = Vector3.SqrMagnitude (char1Model.transform.position - char2.transform.position);
-			if (distanceToTarget < 6) {
+			if (Mathf.FloorToInt(character.transform.position.z) == 0) {
 				attackState = AttackingStates.ATTACKING;
 			}
+
 			break;
 		case AttackingStates.ATTACKING:
 			if (attackTimer <= -10.0f) {
-				char1Model.GetComponent<Animator> ().SetBool ("Attacking", true);
+				character.GetComponent<Animator> ().SetBool ("Attacking", true);
 				attackTimer = 1.05f;
 			} else if (attackTimer <= 0.0f) {
+				character.transform.localRotation *= Quaternion.Euler(0, 180, 0);
 				attackState = AttackingStates.RETURNING;
 				attackTimer = -10.0f;
 			}
 			attackTimer -= Time.deltaTime;
 			break;
 		case AttackingStates.RETURNING:
-			nav.SetDestination (char1.transform.position);
+			character.GetComponent<Animator> ().SetBool ("Running", true);
+			moveDirection = new Vector3 (0, 0, movementSpeed);
+			character.transform.Translate (moveDirection * Time.deltaTime);
 
-			float distanceToOrigin = Vector3.SqrMagnitude (char1Model.transform.position - char1.transform.position);
-			Debug.Log (distanceToOrigin);
-			if (distanceToOrigin < 3) {
-				char1Model.GetComponent<Animator> ().SetBool ("Running", false);
+			if (Mathf.Abs(character.transform.position.z) >= 10) {
+				character.GetComponent<Animator> ().SetBool ("Running", false);
+				character.transform.localRotation *= Quaternion.Euler(0, 180, 0);
+				isActionFinished = true;
 			}
 			break;
 		}
 	}
 
-	private Transform getModel(GameObject character) {
-		foreach (Transform child in character.GetComponent<Transform> ()) {
-			if (child.CompareTag ("Model")) {
-				return child;
-			}
+	private void attackClick() {
+		nextBattleState ();
+	}
+
+	private void nextBattleState() {
+		Debug.Log ("======");
+		Debug.Log (currentState);
+		switch (currentState) {
+		case BattleStates.START:
+			currentState = BattleStates.PLAYERTURN;
+			break;
+		case BattleStates.PLAYERTURN:
+			currentState = BattleStates.PLAYERANIMATION;
+			break;
+		case BattleStates.PLAYERANIMATION:
+			currentState = BattleStates.ENEMYTURN;
+			break;
+		case BattleStates.ENEMYTURN:
+			currentState = BattleStates.PLAYERTURN;
+			break;
 		}
-		return null;
+		Debug.Log (currentState);
 	}
 }
