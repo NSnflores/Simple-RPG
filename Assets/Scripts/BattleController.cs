@@ -20,36 +20,62 @@ public class BattleController : MonoBehaviour {
 		RETURNING
 	}
 
+	public enum PlayerChoices {
+		NONE,
+		ATTACK,
+		DEFENCE,
+		RUN
+	}
+
 	public GameObject player;
 	public List<GameObject> enemies;
-	public Button attackButton;
 	public int movementSpeed;
+	public GameObject playerMenu;
 
 	private BattleStates currentState;
 	private AttackingStates attackState;
+	private PlayerChoices playerChoice;
 	private float attackTimer;
 	private bool isActionFinished;
+	private GameObject playerTarget;
+	private int enemyTurn;
 
 	void Start () {
 		currentState = BattleStates.START;
 		attackTimer = -10.0f;
+
+		Button attackButton = (Button)playerMenu.transform.Find ("AttackButton").GetComponent<Button> ();
 		attackButton.onClick.AddListener (attackClick);
+		Button defenceButton = (Button)playerMenu.transform.Find ("DefenceButton").GetComponent<Button> ();
+		defenceButton.onClick.AddListener (defenceClick);
+		Button runButton = (Button)playerMenu.transform.Find ("RunButton").GetComponent<Button> ();
+		runButton.onClick.AddListener (runClick);
 	}
 
 	void Update () {
-		//Debug.Log (currentState);
 		isActionFinished = false;
+
 		switch (currentState) {
 		case BattleStates.START:
-			nextBattleState ();
+			playerChoice = PlayerChoices.NONE;
+			playerTarget = null;
+			enemyTurn = 1;
+			isActionFinished = true;
+			player.GetComponent<Animator> ().SetBool ("Defence", false);
 			break;
 		case BattleStates.PLAYERTURN:
+			playerSelecting ();
 			break;
 		case BattleStates.PLAYERANIMATION:
-			CharacterAttack (player);
+			playerMenu.SetActive (false);
+			playerAnimation ();
 			break;
 		case BattleStates.ENEMYTURN:
-			CharacterAttack(enemies[0]);
+			CharacterAttack (enemies [enemyTurn - 1], player);
+			if (isActionFinished && enemies.Count != enemyTurn) {
+				isActionFinished = false;
+				enemyTurn++;
+			}
 			break;
 		case BattleStates.WIN:
 			break;
@@ -58,11 +84,50 @@ public class BattleController : MonoBehaviour {
 		}
 		if (isActionFinished) {
 			nextBattleState ();
-			attackState = AttackingStates.GOING;
 		}
 	}
 
-	private void CharacterAttack(GameObject character) {
+	private void playerSelecting () {
+		switch (playerChoice) {
+		case PlayerChoices.NONE:
+			playerMenu.SetActive (true);
+			break;
+		case PlayerChoices.ATTACK:
+			if (Input.GetMouseButtonUp(0)) {
+				Vector3 mouse = Input.mousePosition;
+				Ray castPoint = Camera.main.ScreenPointToRay(mouse);
+				RaycastHit cameraHit;
+
+				if (Physics.Raycast (castPoint, out cameraHit, Mathf.Infinity)) {
+					if (cameraHit.transform.gameObject.tag == "Enemy") {
+						playerTarget = cameraHit.transform.gameObject;
+						isActionFinished = true;
+					}
+				}
+			}
+			break;
+		case PlayerChoices.DEFENCE:
+			isActionFinished = true;
+			break;
+		case PlayerChoices.RUN:
+			isActionFinished = true;
+			break;
+		}
+	}
+
+	private void playerAnimation() {
+		switch (playerChoice) {
+		case PlayerChoices.ATTACK:
+			CharacterAttack (player, playerTarget);
+			break;
+		case PlayerChoices.DEFENCE:
+			player.GetComponent<Animator> ().SetBool ("Defence", true);
+			isActionFinished = true;
+			break;
+		}
+	}
+
+	private void CharacterAttack(GameObject character, GameObject target) {
 		Vector3 moveDirection = Vector3.zero;
 
 		switch (attackState) {
@@ -80,6 +145,7 @@ public class BattleController : MonoBehaviour {
 			if (attackTimer <= -10.0f) {
 				character.GetComponent<Animator> ().SetBool ("Attacking", true);
 				attackTimer = 1.05f;
+				target.GetComponent<Animator> ().SetBool ("Damaged", true);
 			} else if (attackTimer <= 0.0f) {
 				character.transform.localRotation *= Quaternion.Euler(0, 180, 0);
 				attackState = AttackingStates.RETURNING;
@@ -95,6 +161,7 @@ public class BattleController : MonoBehaviour {
 			if (Mathf.Abs(character.transform.position.z) >= 10) {
 				character.GetComponent<Animator> ().SetBool ("Running", false);
 				character.transform.localRotation *= Quaternion.Euler(0, 180, 0);
+				attackState = AttackingStates.GOING;
 				isActionFinished = true;
 			}
 			break;
@@ -102,12 +169,19 @@ public class BattleController : MonoBehaviour {
 	}
 
 	private void attackClick() {
-		nextBattleState ();
+		playerMenu.SetActive (false);
+		playerChoice = PlayerChoices.ATTACK;
+	}
+
+	private void defenceClick() {
+		playerChoice = PlayerChoices.DEFENCE;
+	}
+
+	private void runClick() {
+		playerChoice = PlayerChoices.RUN;
 	}
 
 	private void nextBattleState() {
-		Debug.Log ("======");
-		Debug.Log (currentState);
 		switch (currentState) {
 		case BattleStates.START:
 			currentState = BattleStates.PLAYERTURN;
@@ -119,7 +193,7 @@ public class BattleController : MonoBehaviour {
 			currentState = BattleStates.ENEMYTURN;
 			break;
 		case BattleStates.ENEMYTURN:
-			currentState = BattleStates.PLAYERTURN;
+			currentState = BattleStates.START;
 			break;
 		}
 		Debug.Log (currentState);
